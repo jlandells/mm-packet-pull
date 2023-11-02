@@ -27,3 +27,7 @@ All command line parameters can have equivalent environment variables, in order 
 | `--target <dir>` | `MM_SUP_TGT` | Path to a specific directory for the package.  Default is `/tmp` |
 | `--name <name>` | `MM_SUP_NAME` | Name of the customer or other name to use for the prefix of the package filename |
 | `--debug` | `MM_SUP_DEBUG` | Enables debug output |
+
+## Deployment
+
+Rather than having to install a Go development environment, this project is available as a binary for AMD64 Linux environments, at [this link](https://github.com/jlandells/mm-packet-pull/releases/download/v0.1.0/mm-packet-pull_linux_amd64)
