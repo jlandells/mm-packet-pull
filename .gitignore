@@ -19,6 +19,7 @@
 
 # Go workspace file
 go.work
-config.json
+config/*
 .vscode/launch.json
 go.sum
+mm-packet-pull_*
