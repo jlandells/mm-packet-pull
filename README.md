@@ -1,4 +1,7 @@
 # mm-packet-pull
+
+![version](https://img.shields.io/github/v/tag/jlandells/mm-packet-pull?label=version)
+
 This package is used to pull a collection of useful support information for troubleshooting a Mattermost instance that is refusing to start.
 It prepares a tar file containing key information from both Mattermost and the underlying OS that can then be quickly sent to Mattermost Support, without the user
 having to manually collect this key information.
