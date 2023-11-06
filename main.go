@@ -20,29 +20,30 @@ import (
 
 // Defaults & Type Definitions
 
-var DEBUG_MODE bool = false
-var OS_PLATFORM string = ""
+var debugMode bool = false
+var osPlatform string = ""
 
+// LogLevel is used to refer to the type of message that will be written using the logging code.
 type LogLevel string
 
 // Creating this as a struct already in case we need to extract additional items from the config file
-type MMConfig struct {
+type mmConfig struct {
 	LogDirectory string
 	ListenPort   string
 }
 
 const (
-	DEFAULT_MATTERMOST_DIR = "/opt/mattermost"
-	DEFAULT_PACKET_PREFIX  = "support-packet"
-	DEFAULT_TARGET_DIR     = "/tmp"
-	DEFAULT_LISTEN_PORT    = "8065"
+	defaultMattermostDir = "/opt/mattermost"
+	defaultPacketProfix  = "support-packet"
+	defaultTargetDir     = "/tmp"
+	defaultListenPort    = "8065"
 )
 
 const (
-	DEBUG   LogLevel = "DEBUG"
-	INFO    LogLevel = "INFO"
-	WARNING LogLevel = "WARNING"
-	ERROR   LogLevel = "ERROR"
+	debugLevel   LogLevel = "DEBUG"
+	infoLevel    LogLevel = "INFO"
+	warningLevel LogLevel = "WARNING"
+	errorLevel   LogLevel = "ERROR"
 )
 
 const ()
@@ -51,7 +52,7 @@ const ()
 
 // LogMessage logs a formatted message to stdout or stderr
 func LogMessage(level LogLevel, message string) {
-	if level == ERROR {
+	if level == errorLevel {
 		log.SetOutput(os.Stderr)
 	} else {
 		log.SetOutput(os.Stdout)
@@ -63,8 +64,8 @@ func LogMessage(level LogLevel, message string) {
 // DebugPrint allows us to add debug messages into our code, which are only printed if we're running in debug more.
 // Note that the command line parameter '-debug' can be used to enable this at runtime.
 func DebugPrint(message string) {
-	if DEBUG_MODE {
-		LogMessage(DEBUG, message)
+	if debugMode {
+		LogMessage(debugLevel, message)
 	}
 }
 
@@ -92,11 +93,11 @@ func getEnvWithDefault(key string, defaultValue interface{}) interface{} {
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
-		LogMessage(WARNING, "File '"+filename+"' does not exist!")
+		LogMessage(warningLevel, "File '"+filename+"' does not exist!")
 		return false
 	}
 	if info.IsDir() {
-		LogMessage(WARNING, "File '"+filename+"' is a directory!")
+		LogMessage(warningLevel, "File '"+filename+"' is a directory!")
 		return false
 	}
 	return true
@@ -106,11 +107,11 @@ func fileExists(filename string) bool {
 func dirExists(dirname string) bool {
 	info, err := os.Stat(dirname)
 	if os.IsNotExist(err) {
-		LogMessage(WARNING, "Directory '"+dirname+"' does not exist!")
+		LogMessage(warningLevel, "Directory '"+dirname+"' does not exist!")
 		return false
 	}
 	if !info.IsDir() {
-		LogMessage(WARNING, "Directory '"+dirname+"' is not a directory!")
+		LogMessage(warningLevel, "Directory '"+dirname+"' is not a directory!")
 		return false
 	}
 	return true
@@ -128,20 +129,20 @@ func checkPackage(command string) bool {
 	var cmd *exec.Cmd
 	var packageName string
 
-	if OS_PLATFORM == "" {
+	if osPlatform == "" {
 		cmd = exec.Command("bash", "-c", "cat /etc/*-release | grep '^ID='")
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		err := cmd.Run()
 		if err != nil {
-			LogMessage(ERROR, "Unable to determine OS!")
+			LogMessage(errorLevel, "Unable to determine OS!")
 			return false
 		}
 		distroInfo := strings.Split(out.String(), "=")
 		if len(distroInfo) > 1 {
-			OS_PLATFORM = strings.TrimSpace(distroInfo[1])
+			osPlatform = strings.TrimSpace(distroInfo[1])
 		}
-		DebugPrint("Running on " + OS_PLATFORM)
+		DebugPrint("Running on " + osPlatform)
 	}
 
 	// Define a map for package names based on distribution and command
@@ -160,14 +161,14 @@ func checkPackage(command string) bool {
 		},
 	}
 
-	if val, ok := commandPkgMap[OS_PLATFORM][command]; ok {
+	if val, ok := commandPkgMap[osPlatform][command]; ok {
 		packageName = val
 	} else {
-		LogMessage(WARNING, "Package not found for "+command+". Testing using command name directly.")
+		LogMessage(warningLevel, "Package not found for "+command+". Testing using command name directly.")
 		packageName = command
 	}
 
-	switch OS_PLATFORM {
+	switch osPlatform {
 	case "ubuntu":
 		cmd = exec.Command("dpkg", "-l", packageName)
 	case "centos":
@@ -175,7 +176,7 @@ func checkPackage(command string) bool {
 	case "fedora":
 		cmd = exec.Command("dnf", "list", "installed", packageName)
 	default:
-		LogMessage(ERROR, "We should never get here!")
+		LogMessage(errorLevel, "We should never get here!")
 		return false
 	}
 
@@ -183,7 +184,7 @@ func checkPackage(command string) bool {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		LogMessage(WARNING, fmt.Sprint(err)+": "+stderr.String())
+		LogMessage(warningLevel, fmt.Sprint(err)+": "+stderr.String())
 		return false
 	}
 
@@ -196,12 +197,12 @@ func checkPackage(command string) bool {
 // and to store that information in specific values in a custom struct (MMConfig).  Note that the struct was
 // used to make it simplye to expand, whilst offering the flexibility of passing the entire structure to
 // any functions that might need it.
-func (confFile *MMConfig) ProcessConfigFile(configPath string, mmDir string) error {
+func (confFile *mmConfig) ProcessConfigFile(configPath string, mmDir string) error {
 	DebugPrint("Processing config file: " + configPath)
 
 	file, err := os.Open(configPath)
 	if err != nil {
-		LogMessage(ERROR, "Failed to open config file!")
+		LogMessage(errorLevel, "Failed to open config file!")
 		return errors.New("failed to open config file")
 	}
 	defer file.Close()
@@ -219,10 +220,10 @@ func (confFile *MMConfig) ProcessConfigFile(configPath string, mmDir string) err
 		if fileLocation, ok := logSettings["FileLocation"].(string); ok {
 			if fileLocation == "" {
 				confFile.LogDirectory = mmDir + "/logs"
-				LogMessage(INFO, "No logs directory override in config.json.  Using defaults.")
+				LogMessage(infoLevel, "No logs directory override in config.json.  Using defaults.")
 			} else {
 				confFile.LogDirectory = fileLocation
-				LogMessage(INFO, "Using log directory from config file: "+confFile.LogDirectory)
+				LogMessage(infoLevel, "Using log directory from config file: "+confFile.LogDirectory)
 			}
 		}
 	}
@@ -235,8 +236,8 @@ func (confFile *MMConfig) ProcessConfigFile(configPath string, mmDir string) err
 	if serviceSettings, ok := result["ServiceSettings"].(map[string]interface{}); ok {
 		if listenPort, ok := serviceSettings["ListenAddress"].(string); ok {
 			if listenPort == "" {
-				LogMessage(WARNING, "No listen port found in config file!  Defaulting to: "+DEFAULT_LISTEN_PORT)
-				confFile.ListenPort = DEFAULT_LISTEN_PORT
+				LogMessage(warningLevel, "No listen port found in config file!  Defaulting to: "+defaultListenPort)
+				confFile.ListenPort = defaultListenPort
 			} else {
 				lastColonIndex := strings.LastIndex(listenPort, ":")
 				if lastColonIndex == -1 {
@@ -244,7 +245,7 @@ func (confFile *MMConfig) ProcessConfigFile(configPath string, mmDir string) err
 				} else {
 					confFile.ListenPort = listenPort[lastColonIndex+1:]
 				}
-				LogMessage(INFO, "Using listen port from config file: "+confFile.ListenPort)
+				LogMessage(infoLevel, "Using listen port from config file: "+confFile.ListenPort)
 			}
 		}
 	}
@@ -276,7 +277,7 @@ func createTempDir(targetDir string, namePrefix string) (string, error) {
 	// Now we can create the directory, ready to receive the support packet
 	err := os.MkdirAll(dirName, 0755)
 	if err != nil {
-		LogMessage(ERROR, "Failed to create directory: "+dirName)
+		LogMessage(errorLevel, "Failed to create directory: "+dirName)
 		return "", errors.New(err.Error())
 	}
 
@@ -303,7 +304,7 @@ func CopyLogFiles(logFileDirectory string, targetDirectory string) error {
 	cmd := exec.Command("sh", "-c", copyCommand)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		LogMessage(ERROR, "Unable to copy files from:'"+logFileDirectory+"' to: '"+targetDirectory+"'. Error: "+err.Error()+" Output: "+string(output))
+		LogMessage(errorLevel, "Unable to copy files from:'"+logFileDirectory+"' to: '"+targetDirectory+"'. Error: "+err.Error()+" Output: "+string(output))
 		return errors.New(err.Error())
 	}
 
@@ -319,7 +320,7 @@ func CopyConfigFile(configFileName string, targetDirectory string) error {
 	cmd := exec.Command("cp", configFileName, targetDirectory+"/.")
 	err := cmd.Run()
 	if err != nil {
-		LogMessage(ERROR, "Unable to copy config file '"+configFileName+"' to '"+targetDirectory+"'")
+		LogMessage(errorLevel, "Unable to copy config file '"+configFileName+"' to '"+targetDirectory+"'")
 		return errors.New(err.Error())
 	}
 
@@ -339,7 +340,7 @@ func GatherServiceMessages(targetDir string) bool {
 	// We'll write the service logs to two text files: systemctl.txt & journalctl.txt
 	sysFile, err := os.Create(targetDir + "/systemctl.txt")
 	if err != nil {
-		LogMessage(WARNING, "Failed to create output file for systemctl output")
+		LogMessage(warningLevel, "Failed to create output file for systemctl output")
 		noErrors = false
 	} else {
 		cmd := exec.Command("systemctl", "status", "mattermost.service", "--no-pager", "-l")
@@ -348,7 +349,7 @@ func GatherServiceMessages(targetDir string) bool {
 
 		err = cmd.Run()
 		if err != nil {
-			LogMessage(WARNING, "Failed to generate output from systemctl: "+err.Error())
+			LogMessage(warningLevel, "Failed to generate output from systemctl: "+err.Error())
 			noErrors = false
 		}
 	}
@@ -356,7 +357,7 @@ func GatherServiceMessages(targetDir string) bool {
 
 	jnlFile, err := os.Create(targetDir + "/journalctl.txt")
 	if err != nil {
-		LogMessage(WARNING, "Failed to create output file for journalctl output")
+		LogMessage(warningLevel, "Failed to create output file for journalctl output")
 		noErrors = false
 	} else {
 		cmd := exec.Command("journalctl", "-xe", "--no-pager")
@@ -365,7 +366,7 @@ func GatherServiceMessages(targetDir string) bool {
 
 		err = cmd.Run()
 		if err != nil {
-			LogMessage(WARNING, "Failed to generate output from journalctl: "+err.Error())
+			LogMessage(warningLevel, "Failed to generate output from journalctl: "+err.Error())
 			noErrors = false
 		}
 	}
@@ -383,7 +384,7 @@ func GetTopProcesses(targetDir string) error {
 
 	file, err := os.Create(targetDir + "/top.txt")
 	if err != nil {
-		LogMessage(ERROR, "Unable to create file for top processes in "+targetDir)
+		LogMessage(errorLevel, "Unable to create file for top processes in "+targetDir)
 		return errors.New(err.Error())
 	}
 	defer file.Close()
@@ -396,14 +397,14 @@ func GetTopProcesses(targetDir string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		LogMessage(WARNING, "Failed to generate output from top")
+		LogMessage(warningLevel, "Failed to generate output from top")
 		return errors.New(err.Error())
 	}
 
 	return nil
 }
 
-// CheckLiseningPort uses either netstat or ss to see what processes (if any) are listening on the
+// CheckListeningPort uses either netstat or ss to see what processes (if any) are listening on the
 // port that Mattermost is trying to use.  Note that we can't be sure which package is installed
 // (if any) for these commands, so we need to figure that out first.
 // THe function takes the port in question and the temp directory as parameters, and returns an
@@ -421,14 +422,14 @@ func CheckListeningPort(port string, targetDir string) error {
 	} else if checkPackage("ss") {
 		cmdName = "ss"
 	} else {
-		LogMessage(ERROR, "Neither netstat nor ss found!")
+		LogMessage(errorLevel, "Neither netstat nor ss found!")
 		return errors.New("mising package")
 	}
 
 	// Prepare the output file
 	file, err := os.Create(targetDir + "/portinfo.txt")
 	if err != nil {
-		LogMessage(ERROR, "Unable to create file for port information in "+targetDir)
+		LogMessage(errorLevel, "Unable to create file for port information in "+targetDir)
 		return errors.New(err.Error())
 	}
 	defer file.Close()
@@ -446,7 +447,7 @@ func CheckListeningPort(port string, targetDir string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		LogMessage(WARNING, "Failed to locate port information!")
+		LogMessage(warningLevel, "Failed to locate port information!")
 		return errors.New(err.Error())
 	}
 
@@ -465,7 +466,7 @@ func CopyOSInfoFiles(targetDir string) bool {
 
 	err := cmd.Run()
 	if err != nil {
-		LogMessage(WARNING, "Failed to copy os-release. Error "+err.Error())
+		LogMessage(warningLevel, "Failed to copy os-release. Error "+err.Error())
 		noErrors = false
 	}
 
@@ -473,7 +474,7 @@ func CopyOSInfoFiles(targetDir string) bool {
 
 	err = cmd.Run()
 	if err != nil {
-		LogMessage(WARNING, "Failed to copy meminfo.  Error: "+err.Error())
+		LogMessage(warningLevel, "Failed to copy meminfo.  Error: "+err.Error())
 		noErrors = false
 	}
 
@@ -488,7 +489,7 @@ func GetDiskSpace(targetDir string) error {
 
 	file, err := os.Create(targetDir + "/diskspace.txt")
 	if err != nil {
-		LogMessage(ERROR, "Unable to create file for disk space in "+targetDir)
+		LogMessage(errorLevel, "Unable to create file for disk space in "+targetDir)
 		return errors.New(err.Error())
 	}
 	defer file.Close()
@@ -499,7 +500,7 @@ func GetDiskSpace(targetDir string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		LogMessage(WARNING, "Failed to generate output from df")
+		LogMessage(warningLevel, "Failed to generate output from df")
 		return errors.New(err.Error())
 	}
 
@@ -527,7 +528,7 @@ func CompressSupportPacket(targetDir string, parentDir string) (string, error) {
 	cmd := exec.Command("tar", "-cvzf", compressedFileName, targetDir)
 	err := cmd.Run()
 	if err != nil {
-		LogMessage(ERROR, "Failed to compress support packet!  Error: "+err.Error())
+		LogMessage(errorLevel, "Failed to compress support packet!  Error: "+err.Error())
 		return "", errors.New(err.Error())
 	}
 
@@ -540,7 +541,7 @@ func main() {
 
 	// Check that user is running with root privileges - abort if not!
 	if !isRoot() {
-		LogMessage(ERROR, "'root' or 'sudo' priveleges are required to run this utility!  Please try again using 'sudo'.")
+		LogMessage(errorLevel, "'root' or 'sudo' priveleges are required to run this utility!  Please try again using 'sudo'.")
 		os.Exit(2)
 	}
 
@@ -550,37 +551,37 @@ func main() {
 	var PkgNamePrefix string
 	var DebugFlag bool
 
-	flag.StringVar(&MattermostDir, "directory", "", "Install directory of Mattermost. [Default: "+DEFAULT_MATTERMOST_DIR+"]")
-	flag.StringVar(&TargetDir, "target", "", "Target directory in which the support packet will be created. [Default: "+DEFAULT_TARGET_DIR+"]")
-	flag.StringVar(&PkgNamePrefix, "name", "", "Prefix for name of support packet. [Default: "+DEFAULT_PACKET_PREFIX+"]")
+	flag.StringVar(&MattermostDir, "directory", "", "Install directory of Mattermost. [Default: "+defaultMattermostDir+"]")
+	flag.StringVar(&TargetDir, "target", "", "Target directory in which the support packet will be created. [Default: "+defaultTargetDir+"]")
+	flag.StringVar(&PkgNamePrefix, "name", "", "Prefix for name of support packet. [Default: "+defaultPacketProfix+"]")
 	flag.BoolVar(&DebugFlag, "debug", false, "Enable debug mode.")
 
 	flag.Parse()
 
 	// If information not supplied on the command line, check whether it's available as an envrionment variable
 	if MattermostDir == "" {
-		MattermostDir = getEnvWithDefault("MM_SUP_DIR", DEFAULT_MATTERMOST_DIR).(string)
+		MattermostDir = getEnvWithDefault("MM_SUP_DIR", defaultMattermostDir).(string)
 	}
 	if TargetDir == "" {
-		TargetDir = getEnvWithDefault("MM_SUP_TGT", DEFAULT_TARGET_DIR).(string)
+		TargetDir = getEnvWithDefault("MM_SUP_TGT", defaultTargetDir).(string)
 	}
 	if PkgNamePrefix == "" {
-		PkgNamePrefix = getEnvWithDefault("MM_SUP_NAME", DEFAULT_PACKET_PREFIX).(string)
+		PkgNamePrefix = getEnvWithDefault("MM_SUP_NAME", defaultPacketProfix).(string)
 	}
 	if !DebugFlag {
-		DebugFlag = getEnvWithDefault("MM_SUP_DEBUG", DEBUG_MODE).(bool)
+		DebugFlag = getEnvWithDefault("MM_SUP_DEBUG", debugMode).(bool)
 	}
-	DEBUG_MODE = DebugFlag
+	debugMode = DebugFlag
 
 	// Validate that Mattermost is present at either the default location, or the overridden location
 	var ConfigFilePath string = MattermostDir + "/config/config.json"
 
 	if !fileExists(ConfigFilePath) {
-		LogMessage(WARNING, "Config file not found at: "+ConfigFilePath)
-		LogMessage(INFO, "Attempting default configuration for config file")
-		ConfigFilePath = DEFAULT_MATTERMOST_DIR + "/config/config.json"
+		LogMessage(warningLevel, "Config file not found at: "+ConfigFilePath)
+		LogMessage(infoLevel, "Attempting default configuration for config file")
+		ConfigFilePath = defaultMattermostDir + "/config/config.json"
 		if !fileExists(ConfigFilePath) {
-			LogMessage(ERROR, "Unable to locate config file!")
+			LogMessage(errorLevel, "Unable to locate config file!")
 			os.Exit(3)
 		}
 	}
@@ -590,8 +591,8 @@ func main() {
 	DebugPrint("PkgNamePrefix: " + PkgNamePrefix)
 
 	// Process config.json
-	LogMessage(INFO, "Analysing config file...")
-	CurrentConfig := new(MMConfig)
+	LogMessage(infoLevel, "Analysing config file...")
+	CurrentConfig := new(mmConfig)
 
 	CurrentConfig.ProcessConfigFile(ConfigFilePath, MattermostDir)
 
@@ -601,66 +602,66 @@ func main() {
 	// Create a temp directory to hold the support packet.
 	tempDirectory, err := createTempDir(TargetDir, PkgNamePrefix)
 	if err != nil {
-		LogMessage(ERROR, "Unable to proceed without temp directory!  Error: "+err.Error())
+		LogMessage(errorLevel, "Unable to proceed without temp directory!  Error: "+err.Error())
 		os.Exit(4)
 	}
-	LogMessage(INFO, "Creating support packet in: "+tempDirectory)
+	LogMessage(infoLevel, "Creating support packet in: "+tempDirectory)
 
 	// Copy all log files from the Mattermost directory to the temp directory
-	LogMessage(INFO, "Copying Mattermost log files")
+	LogMessage(infoLevel, "Copying Mattermost log files")
 	err = CopyLogFiles(CurrentConfig.LogDirectory, tempDirectory)
 	if err != nil {
-		LogMessage(WARNING, "Failed to copy Mattermost log files. Error: "+err.Error())
+		LogMessage(warningLevel, "Failed to copy Mattermost log files. Error: "+err.Error())
 	}
 
 	// Copy the config file to the temp directory
-	LogMessage(INFO, "Copying Mattermost config file")
+	LogMessage(infoLevel, "Copying Mattermost config file")
 	err = CopyConfigFile(ConfigFilePath, tempDirectory)
 	if err != nil {
-		LogMessage(WARNING, "Failed to copy the Mattermost config file. Error: "+err.Error())
+		LogMessage(warningLevel, "Failed to copy the Mattermost config file. Error: "+err.Error())
 	}
 
 	// Gathering information from system services
-	LogMessage(INFO, "Gathering service level information")
+	LogMessage(infoLevel, "Gathering service level information")
 	if !GatherServiceMessages(tempDirectory) {
-		LogMessage(WARNING, "Not all service information was gathered")
+		LogMessage(warningLevel, "Not all service information was gathered")
 	}
 
 	// Gather details of top running processes
-	LogMessage(INFO, "Gathering details of running processes")
+	LogMessage(infoLevel, "Gathering details of running processes")
 	err = GetTopProcesses(tempDirectory)
 	if err != nil {
-		LogMessage(WARNING, "Failed to get top processes. Error: "+err.Error())
+		LogMessage(warningLevel, "Failed to get top processes. Error: "+err.Error())
 	}
 
 	// Get port listening info from netstat/ss
-	LogMessage(INFO, "Checking port listening status")
+	LogMessage(infoLevel, "Checking port listening status")
 	err = CheckListeningPort(CurrentConfig.ListenPort, tempDirectory)
 	if err != nil {
-		LogMessage(WARNING, "Failed to locate listening port information.  Error: "+err.Error())
+		LogMessage(warningLevel, "Failed to locate listening port information.  Error: "+err.Error())
 	}
 
 	// Copy OS information files to target directory
-	LogMessage(INFO, "Copying key OS information files")
+	LogMessage(infoLevel, "Copying key OS information files")
 	if !CopyOSInfoFiles(tempDirectory) {
-		LogMessage(WARNING, "Some OS info files may be missing!")
+		LogMessage(warningLevel, "Some OS info files may be missing!")
 	}
 
 	// Get the disk free space
-	LogMessage(INFO, "Retrieving disk space information")
+	LogMessage(infoLevel, "Retrieving disk space information")
 	err = GetDiskSpace(tempDirectory)
 	if err != nil {
-		LogMessage(WARNING, "Failed to retrieve disk space utilisation")
+		LogMessage(warningLevel, "Failed to retrieve disk space utilisation")
 	}
 
 	// Compress temp folder, in preparation for sending to Mattermost
-	LogMessage(INFO, "Compressing suport packet")
+	LogMessage(infoLevel, "Compressing suport packet")
 	supportPacketName, err := CompressSupportPacket(tempDirectory, TargetDir)
 	if err != nil {
-		LogMessage(ERROR, "Failed to create support package!  Please check temp directory and compress manually.")
+		LogMessage(errorLevel, "Failed to create support package!  Please check temp directory and compress manually.")
 		os.Exit(5)
 	}
 
-	LogMessage(INFO, "Support packet creation complete!  Please send the following file to Mattermost Support: "+supportPacketName)
+	LogMessage(infoLevel, "Support packet creation complete!  Please send the following file to Mattermost Support: "+supportPacketName)
 
 }
