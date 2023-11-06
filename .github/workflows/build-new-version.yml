@@ -42,6 +42,8 @@ jobs:
           git config --local user.name "jlandells"
           git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
           git push origin "v${{ env.VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         if: steps.check_tag.outputs.tag_exists == 'false'
