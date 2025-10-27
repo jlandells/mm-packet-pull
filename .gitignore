@@ -23,3 +23,5 @@ config/*
 .vscode/launch.json
 go.sum
 mm-packet-pull_*
+support-packet_*.tar.gz
+tmp

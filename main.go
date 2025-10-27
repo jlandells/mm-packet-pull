@@ -508,9 +508,9 @@ func GetDiskSpace(targetDir string) error {
 }
 
 // CompressSupportPacket is used as the last step in the process, to take the directory containing all of the files
-// (passed om as targetDir) and to compress them into a tar file in the parent directory (passed in as parentDir).
-// The function generates the name of the tar file by taking the name of the temp directory and suffixing .tar.
-// The function returns the full path to the tar file on success, as well as an error object (nil on success).
+// (passed om as targetDir) and to compress them into a tar.gz file in the parent directory (passed in as parentDir).
+// The function generates the name of the tar.gz file by taking the name of the temp directory and suffixing .tar.gz.
+// The function returns the full path to the tar.gz file on success, as well as an error object (nil on success).
 // If anything fails in this process, the path will be returned as a null string, and more information on the error
 // will be contained in the error object.
 func CompressSupportPacket(targetDir string, parentDir string) (string, error) {
@@ -521,7 +521,7 @@ func CompressSupportPacket(targetDir string, parentDir string) (string, error) {
 
 	DebugPrint("compressedFileNameBase: " + compressedFileNameBase)
 
-	compressedFileName := fmt.Sprintf("%s/%s.tar", parentDir, compressedFileNameBase)
+	compressedFileName := fmt.Sprintf("%s/%s.tar.gz", parentDir, compressedFileNameBase)
 
 	DebugPrint("compressedFileName: " + compressedFileName)
 
@@ -550,11 +550,13 @@ func main() {
 	var TargetDir string
 	var PkgNamePrefix string
 	var DebugFlag bool
+	var NoObfuscateFlag bool
 
 	flag.StringVar(&MattermostDir, "directory", "", "Install directory of Mattermost. [Default: "+defaultMattermostDir+"]")
 	flag.StringVar(&TargetDir, "target", "", "Target directory in which the support packet will be created. [Default: "+defaultTargetDir+"]")
 	flag.StringVar(&PkgNamePrefix, "name", "", "Prefix for name of support packet. [Default: "+defaultPacketProfix+"]")
 	flag.BoolVar(&DebugFlag, "debug", false, "Enable debug mode.")
+	flag.BoolVar(&NoObfuscateFlag, "no-obfuscate", false, "Disable obfuscation of sensitive data in logs and config files. [Default: obfuscation enabled]")
 
 	flag.Parse()
 
@@ -573,6 +575,11 @@ func main() {
 	}
 	debugMode = DebugFlag
 
+	if !NoObfuscateFlag {
+		NoObfuscateFlag = getEnvWithDefault("MM_SUP_NO_OBFUSCATE", false).(bool)
+	}
+	EnableObfuscation := !NoObfuscateFlag
+
 	// Validate that Mattermost is present at either the default location, or the overridden location
 	var ConfigFilePath string = MattermostDir + "/config/config.json"
 
@@ -589,6 +596,13 @@ func main() {
 	DebugPrint("MattermostDir: " + MattermostDir)
 	DebugPrint("TargetDir: " + TargetDir)
 	DebugPrint("PkgNamePrefix: " + PkgNamePrefix)
+
+	// Log obfuscation status
+	if EnableObfuscation {
+		LogMessage(infoLevel, "Data obfuscation is ENABLED (use -no-obfuscate to disable)")
+	} else {
+		LogMessage(warningLevel, "Data obfuscation is DISABLED - sensitive data will NOT be masked!")
+	}
 
 	// Process config.json
 	LogMessage(infoLevel, "Analysing config file...")
@@ -652,6 +666,16 @@ func main() {
 	err = GetDiskSpace(tempDirectory)
 	if err != nil {
 		LogMessage(warningLevel, "Failed to retrieve disk space utilisation")
+	}
+
+	// Obfuscate sensitive data in all collected files
+	if EnableObfuscation {
+		LogMessage(infoLevel, "Obfuscating sensitive data in logs, config, and system files")
+		if err := ObfuscateDirectory(tempDirectory, "*"); err != nil {
+			LogMessage(warningLevel, "Failed to obfuscate sensitive data. Error: "+err.Error())
+		} else {
+			LogMessage(infoLevel, "Obfuscation completed successfully")
+		}
 	}
 
 	// Compress temp folder, in preparation for sending to Mattermost
